@@ -98,7 +98,7 @@ func (r *reporter) send() error {
 		case metrics.Counter:
 			r.reportCounter(name, m)
 		case metrics.Histogram:
-			r.reportHistogram(m, name)
+			r.reportHistogram(name, m)
 		}
 	})
 	return nil
@@ -114,70 +114,71 @@ func (r *reporter) reportCounter(name string, m metrics.Counter) error {
 	return r.sendGangliaMetric(metric, m.Count())
 }
 
-func (r *reporter) reportHistogram(histogram metrics.Histogram, name string) error {
+func (r *reporter) getModelMetric(prefix string, name string, valueType string, slope string) *gmetric.Metric {
 	metric := new(gmetric.Metric)
 	metric.TickInterval = 20 * time.Second
 	metric.Lifetime = 24 * time.Hour
 
-	metric.Name = fmt.Sprintf("%s.max", name)
-	metric.ValueType = gmetric.ValueUint32
-	metric.Slope = gmetric.SlopeBoth
+	metric.Name = fmt.Sprintf("%s.%s", prefix, name)
+
+	if valueType == "int32" {
+		metric.ValueType = gmetric.ValueInt32
+	}else if valueType == "float32" {
+		metric.ValueType = gmetric.ValueFloat32
+	}
+
+	if slope == "positive" {
+		metric.Slope = gmetric.SlopePositive
+	}else if slope == "both"{
+		metric.Slope = gmetric.SlopeBoth
+	}
+
+	return metric
+}
+
+func (r *reporter) reportHistogram(name string, histogram metrics.Histogram) error {
+
+	metric := r.getModelMetric(name, "max", "int32", "positive")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Max()); err != nil {
 		return err
 	}
 
-	metric.Name = fmt.Sprintf("%s.min", name)
-	metric.ValueType = gmetric.ValueUint32
-	metric.Slope = gmetric.SlopeBoth
+	metric = r.getModelMetric(name, "min", "int32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Min()); err != nil {
 		return err
 	}
 
-	metric.Name = fmt.Sprintf("%s.stddev", name)
-	metric.ValueType = gmetric.ValueFloat32
-	metric.Slope = gmetric.SlopeBoth
+	metric = r.getModelMetric(name, "stddev", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().StdDev()); err != nil {
 		return err
 	}
 
-	metric.Name = fmt.Sprintf("%s.variance", name)
-	metric.ValueType = gmetric.ValueFloat32
-	metric.Slope = gmetric.SlopeBoth
+	metric = r.getModelMetric(name, "varience", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Variance()); err != nil {
 		return err
 	}
 
-	metric.Name = fmt.Sprintf("%s.10thparcentile", name)
-	metric.ValueType = gmetric.ValueFloat32
-	metric.Slope = gmetric.SlopeBoth
+	metric = r.getModelMetric(name, "10thparcentile", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.10)); err != nil {
 		return err
 	}
 
-	metric.Name = fmt.Sprintf("%s.25thparcentile", name)
-	metric.ValueType = gmetric.ValueFloat32
-	metric.Slope = gmetric.SlopeBoth
+	metric = r.getModelMetric(name, "25thparcentile", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.25)); err != nil {
 		return err
 	}
 
-	metric.Name = fmt.Sprintf("%s.50thparcentile", name)
-	metric.ValueType = gmetric.ValueFloat32
-	metric.Slope = gmetric.SlopeBoth
+	metric = r.getModelMetric(name, "50thparcentile", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.50)); err != nil {
 		return err
 	}
 
-	metric.Name = fmt.Sprintf("%s.75thparcentile", name)
-	metric.ValueType = gmetric.ValueFloat32
-	metric.Slope = gmetric.SlopeBoth
+	metric = r.getModelMetric(name, "75thparcentile", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.75)); err != nil {
 		return err
 	}
 
-	metric.Name = fmt.Sprintf("%s.99thparcentile", name)
-	metric.ValueType = gmetric.ValueFloat32
-	metric.Slope = gmetric.SlopeBoth
+	metric = r.getModelMetric(name, "99thparcentile", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.99)); err != nil {
 		return err
 	}
