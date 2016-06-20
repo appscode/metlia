@@ -99,6 +99,8 @@ func (r *reporter) send() error {
 			r.reportCounter(name, m)
 		case metrics.Histogram:
 			r.reportHistogram(name, m)
+		case metrics.Gauge:
+			r.reportGauge(name, m)
 		}
 	})
 	return nil
@@ -114,6 +116,10 @@ func (r *reporter) reportCounter(name string, m metrics.Counter) error {
 	return r.sendGangliaMetric(metric, m.Count())
 }
 
+func (r *reporter) reportGauge(name string, m metrics.Counter) error {
+
+}
+
 func (r *reporter) getModelMetric(prefix string, name string, valueType string, slope string) *gmetric.Metric {
 	metric := new(gmetric.Metric)
 	metric.TickInterval = 20 * time.Second
@@ -123,13 +129,13 @@ func (r *reporter) getModelMetric(prefix string, name string, valueType string, 
 
 	if valueType == "int32" {
 		metric.ValueType = gmetric.ValueInt32
-	}else if valueType == "float32" {
+	} else if valueType == "float32" {
 		metric.ValueType = gmetric.ValueFloat32
 	}
 
 	if slope == "positive" {
 		metric.Slope = gmetric.SlopePositive
-	}else if slope == "both"{
+	} else if slope == "both" {
 		metric.Slope = gmetric.SlopeBoth
 	}
 
