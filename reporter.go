@@ -101,30 +101,19 @@ func (r *reporter) send() error {
 			r.reportHistogram(name, m)
 		case metrics.Gauge:
 			r.reportGauge(name, m)
+		case metrics.Meter:
+			r.reportMeter(name, m)
+		case metrics.Timer:
+			r.reportTimer(name, m)
 		}
 	})
 	return nil
-}
-
-func (r *reporter) reportCounter(name string, m metrics.Counter) error {
-	metric := new(gmetric.Metric)
-	metric.TickInterval = 20 * time.Second
-	metric.Lifetime = 24 * time.Hour
-	metric.Name = fmt.Sprintf("%s.count", name)
-	metric.ValueType = gmetric.ValueUint32
-	metric.Slope = gmetric.SlopePositive
-	return r.sendGangliaMetric(metric, m.Count())
-}
-
-func (r *reporter) reportGauge(name string, m metrics.Counter) error {
-
 }
 
 func (r *reporter) getModelMetric(prefix string, name string, valueType string, slope string) *gmetric.Metric {
 	metric := new(gmetric.Metric)
 	metric.TickInterval = 20 * time.Second
 	metric.Lifetime = 24 * time.Hour
-
 	metric.Name = fmt.Sprintf("%s.%s", prefix, name)
 
 	if valueType == "int32" {
@@ -132,14 +121,106 @@ func (r *reporter) getModelMetric(prefix string, name string, valueType string, 
 	} else if valueType == "float32" {
 		metric.ValueType = gmetric.ValueFloat32
 	}
-
 	if slope == "positive" {
 		metric.Slope = gmetric.SlopePositive
+	} else if slope == "negative" {
+		metric.Slope = gmetric.SlopeNegative
 	} else if slope == "both" {
 		metric.Slope = gmetric.SlopeBoth
 	}
-
 	return metric
+}
+
+func (r *reporter) reportCounter(name string, m metrics.Counter) error {
+	metric := r.getModelMetric(name, "count", "int32", "positive")
+	return r.sendGangliaMetric(metric, m.Count())
+}
+
+func (r *reporter) reportGauge(name string, g metrics.Gauge) error {
+	metric := r.getModelMetric(name, "value", "float32", "both")
+	return r.sendGangliaMetric(metric, g.Snapshot().Value())
+}
+
+func (r *reporter) reportMeter(name string, m metrics.Meter) error {
+	metric := r.getModelMetric(name, "count", "int32", "positive")
+	if err := r.sendGangliaMetric(metric, m.Snapshot().Count()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "mean_rate", "float32", "both")
+	if err := r.sendGangliaMetric(metric, m.Snapshot().RateMean()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "m1_rate", "float32", "both")
+	if err := r.sendGangliaMetric(metric, m.Snapshot().Rate1()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "m5_rate", "float32", "both")
+	if err := r.sendGangliaMetric(metric, m.Snapshot().Rate5()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "m15_rate", "float32", "both")
+	if err := r.sendGangliaMetric(metric, m.Snapshot().Rate15()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *reporter) reportTimer(name string, timer metrics.Timer) error {
+	metric := r.getModelMetric(name, "count", "int32", "positive")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Count()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "max", "int32", "positive")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Max()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "min", "int32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Min()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "mean", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Mean()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "variance", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Variance()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "stddev", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().StdDev()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "sum", "int32", "positive")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Sum()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "p50", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Percentile(0.50)); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "p75", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Percentile(0.75)); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "p95", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Percentile(0.95)); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "p98", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Percentile(0.98)); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "p99", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Percentile(0.99)); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "p999", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Percentile(0.999)); err != nil {
+		return err
+	}
+
+
+	return nil
 }
 
 func (r *reporter) reportHistogram(name string, histogram metrics.Histogram) error {
@@ -164,30 +245,36 @@ func (r *reporter) reportHistogram(name string, histogram metrics.Histogram) err
 		return err
 	}
 
-	metric = r.getModelMetric(name, "10thparcentile", "float32", "both")
-	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.10)); err != nil {
-		return err
-	}
-
-	metric = r.getModelMetric(name, "25thparcentile", "float32", "both")
-	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.25)); err != nil {
-		return err
-	}
-
-	metric = r.getModelMetric(name, "50thparcentile", "float32", "both")
+	metric = r.getModelMetric(name, "p50", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.50)); err != nil {
 		return err
 	}
 
-	metric = r.getModelMetric(name, "75thparcentile", "float32", "both")
+	metric = r.getModelMetric(name, "p75", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.75)); err != nil {
 		return err
 	}
 
-	metric = r.getModelMetric(name, "99thparcentile", "float32", "both")
+	metric = r.getModelMetric(name, "p95", "float32", "both")
+	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.95)); err != nil {
+		return err
+	}
+
+	metric = r.getModelMetric(name, "p98", "float32", "both")
+	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.98)); err != nil {
+		return err
+	}
+
+	metric = r.getModelMetric(name, "p99", "float32", "both")
 	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.99)); err != nil {
 		return err
 	}
+
+	metric = r.getModelMetric(name, "p999", "float32", "both")
+	if err := r.sendGangliaMetric(metric, histogram.Snapshot().Percentile(0.999)); err != nil {
+		return err
+	}
+
 	return nil
 }
 
