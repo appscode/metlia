@@ -182,6 +182,22 @@ func (r *reporter) reportTimer(name string, timer metrics.Timer) error {
 	if err := r.sendGangliaMetric(metric, timer.Snapshot().Mean()); err != nil {
 		return err
 	}
+	metric = r.getModelMetric(name, "mean_rate", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().RateMean()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "m1_rate", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Rate1()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "m5_rate", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Rate5()); err != nil {
+		return err
+	}
+	metric = r.getModelMetric(name, "m15_rate", "float32", "both")
+	if err := r.sendGangliaMetric(metric, timer.Snapshot().Rate15()); err != nil {
+		return err
+	}
 	metric = r.getModelMetric(name, "variance", "float32", "both")
 	if err := r.sendGangliaMetric(metric, timer.Snapshot().Variance()); err != nil {
 		return err
@@ -218,8 +234,6 @@ func (r *reporter) reportTimer(name string, timer metrics.Timer) error {
 	if err := r.sendGangliaMetric(metric, timer.Snapshot().Percentile(0.999)); err != nil {
 		return err
 	}
-
-
 	return nil
 }
 
