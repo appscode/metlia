@@ -1,3 +1,5 @@
+[![CLA assistant](https://cla-assistant.io/readme/badge/appscode/metlia)](https://cla-assistant.io/appscode/metlia)
+
 Metlia
 ======
 
