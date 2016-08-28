@@ -20,25 +20,18 @@ Usage
 -----
 
 ```go
-
 import (
-  "github.com/appscode/metlia"
-  "github.com/rcrowley/go-metrics"
+	"net"
+	"time"
+
+	"github.com/appscode/metlia"
+	"github.com/rcrowley/go-metrics"
 )
 
-config := &metlia.Config{
-  Registry: metrics.NewRegistry(),  // metrics registry
-  Interval: time.Second * 60,       // interval
-  Ganglia: &metlia.Ganglia{
-    IP:   "url",                    // Ganglia url
-    Port: 8649,                     // Ganglia port
-    },
-}
+reg := metrics.NewRegistry()
+addr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:8649")
 
-reporter, err := metlia.New(config)
-if err == nil {
-  reporter.Run()
-}
+go metlia.Ganglia(reg, 30 * time.Second, addr)
 ```
 
 License
