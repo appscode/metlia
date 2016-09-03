@@ -1,99 +1,62 @@
 package metlia
 
 import (
-	"errors"
 	"fmt"
 	"log"
-	"runtime"
-	"sync"
-	"time"
-
 	"net"
+	"runtime"
+	"time"
 
 	"github.com/facebookgo/ganglia/gmetric"
 	"github.com/rcrowley/go-metrics"
 )
 
-type reporter struct {
-	// Reporter Configurations.
-	config *Config
+type Reporter struct {
+	// Address of Ganglia gmond process
+	Addr *net.UDPAddr
+
+	// Registry holds the matrices. That were needed to be
+	// reported to Ganglia.
+	Registry metrics.Registry
+
+	// Time inerval between two consicutive Ganglia call to
+	// store the matrix value to the DB. If not set Default Will
+	// be 10secs.
+	FlushInterval time.Duration
 
 	// gmetric Client used to communicate with Ganglia.
 	client *gmetric.Client
-
-	// Mutex Lock to call the run() only once for multiple Run() called
-	// with same registry and configs.
-	once sync.Once
 }
 
-func New(conf *Config) (*reporter, error) {
-	if conf.Ganglia == nil {
-		return nil, errors.New("no ganglia configuration found")
-	}
+func Ganglia(r metrics.Registry, d time.Duration, addr *net.UDPAddr) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			handlePanic(rec)
+		}
+	}()
 
-	c, err := conf.Ganglia.newClient()
-	if err != nil {
-		return nil, err
-	}
-
-	if conf.Interval == time.Duration(0) {
-		conf.Interval = time.Second * 10
-	}
-
-	if conf.PingInterval == time.Duration(0) {
-		conf.PingInterval = time.Second * 5
-	}
-
-	return &reporter{
-		config: conf,
-		client: c,
-	}, nil
-}
-
-// Creates a New gmetric client based on the `gmetric` configs
-func (i *Ganglia) newClient() (*gmetric.Client, error) {
-	client := &gmetric.Client{
-		Addr: []net.Addr{
-			&net.UDPAddr{IP: net.ParseIP(i.IP), Port: i.Port},
-		},
-	}
-	if err := client.Open(); err != nil {
-		return nil, err
-	}
-	return client, nil
-}
-
-func (r *reporter) Run() {
-	r.once.Do(func() {
-		go func() {
-			defer func() {
-				if rec := recover(); rec != nil {
-					r.handlePanic(rec)
-				}
-			}()
-			r.run()
-		}()
-	})
-}
-
-func (r *reporter) run() {
-	intervalTicker := time.Tick(r.config.Interval)
-	pingTicker := time.Tick(r.config.PingInterval)
-
-	for {
-		select {
-		case <-intervalTicker:
-			if err := r.send(); err != nil {
-				log.Printf("unable to send metrics to ganglia. err=%v", err)
-			}
-		case <-pingTicker:
-
+	for range time.Tick(d) {
+		g := &Reporter{
+			Addr:          addr,
+			Registry:      r,
+			FlushInterval: d,
+		}
+		if err := g.Send(); err != nil {
+			log.Println(err)
 		}
 	}
 }
 
-func (r *reporter) send() error {
-	r.config.Registry.Each(func(name string, i interface{}) {
+func (r *Reporter) Send() error {
+	r.client = &gmetric.Client{
+		Addr: []net.Addr{r.Addr},
+	}
+	if err := r.client.Open(); err != nil {
+		return err
+	}
+	defer r.client.Close()
+
+	r.Registry.Each(func(name string, i interface{}) {
 		switch m := i.(type) {
 		case metrics.Counter:
 			r.reportCounter(name, m.Snapshot())
@@ -110,7 +73,7 @@ func (r *reporter) send() error {
 	return nil
 }
 
-func (r *reporter) getModelMetric(prefix string, name string, valueType string, slope string) *gmetric.Metric {
+func (r *Reporter) getModelMetric(prefix string, name string, valueType string, slope string) *gmetric.Metric {
 	metric := new(gmetric.Metric)
 	metric.TickInterval = 20 * time.Second
 	metric.Lifetime = 24 * time.Hour
@@ -131,17 +94,17 @@ func (r *reporter) getModelMetric(prefix string, name string, valueType string, 
 	return metric
 }
 
-func (r *reporter) reportCounter(name string, m metrics.Counter) error {
+func (r *Reporter) reportCounter(name string, m metrics.Counter) error {
 	metric := r.getModelMetric(name, "count", "int32", "positive")
 	return r.sendGangliaMetric(metric, m.Count())
 }
 
-func (r *reporter) reportGauge(name string, g metrics.Gauge) error {
+func (r *Reporter) reportGauge(name string, g metrics.Gauge) error {
 	metric := r.getModelMetric(name, "value", "float32", "both")
 	return r.sendGangliaMetric(metric, g.Value())
 }
 
-func (r *reporter) reportMeter(name string, m metrics.Meter) error {
+func (r *Reporter) reportMeter(name string, m metrics.Meter) error {
 	metric := r.getModelMetric(name, "count", "int32", "positive")
 	if err := r.sendGangliaMetric(metric, m.Count()); err != nil {
 		return err
@@ -165,7 +128,7 @@ func (r *reporter) reportMeter(name string, m metrics.Meter) error {
 	return nil
 }
 
-func (r *reporter) reportTimer(name string, timer metrics.Timer) error {
+func (r *Reporter) reportTimer(name string, timer metrics.Timer) error {
 	metric := r.getModelMetric(name, "count", "int32", "positive")
 	if err := r.sendGangliaMetric(metric, timer.Count()); err != nil {
 		return err
@@ -237,8 +200,7 @@ func (r *reporter) reportTimer(name string, timer metrics.Timer) error {
 	return nil
 }
 
-func (r *reporter) reportHistogram(name string, histogram metrics.Histogram) error {
-
+func (r *Reporter) reportHistogram(name string, histogram metrics.Histogram) error {
 	metric := r.getModelMetric(name, "max", "int32", "positive")
 	if err := r.sendGangliaMetric(metric, histogram.Max()); err != nil {
 		return err
@@ -292,7 +254,7 @@ func (r *reporter) reportHistogram(name string, histogram metrics.Histogram) err
 	return nil
 }
 
-func (r *reporter) sendGangliaMetric(metric *gmetric.Metric, val interface{}) error {
+func (r *Reporter) sendGangliaMetric(metric *gmetric.Metric, val interface{}) error {
 	if err := r.client.WriteMeta(metric); err != nil {
 		return err
 	}
@@ -302,16 +264,7 @@ func (r *reporter) sendGangliaMetric(metric *gmetric.Metric, val interface{}) er
 	return nil
 }
 
-func (r *reporter) handlePanic(rec interface{}) {
-	logPanic(rec)
-
-	// Additional panic handlers to run
-	for _, f := range r.config.PanicHandlers {
-		f(r)
-	}
-}
-
-func logPanic(r interface{}) {
+func handlePanic(rec interface{}) {
 	callers := ""
 	for i := 2; true; i++ {
 		_, file, line, ok := runtime.Caller(i)
@@ -320,5 +273,5 @@ func logPanic(r interface{}) {
 		}
 		callers = callers + fmt.Sprintf("%v:%v\n", file, line)
 	}
-	log.Printf("Recovered from panic: %#v \n%v", r, callers)
+	log.Printf("Recovered from panic: %#v \n%v", rec, callers)
 }
