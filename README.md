@@ -1,5 +1,7 @@
 [![CLA assistant](https://cla-assistant.io/readme/badge/appscode/metlia)](https://cla-assistant.io/appscode/metlia)
 
+[Website](https://appscode.com) • [Slack](https://appscode.slack.com) • [Forum](https://discuss.appscode.com) • [Twitter](https://twitter.com/AppsCodeHQ)
+
 Metlia
 ======
 
